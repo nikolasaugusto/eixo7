@@ -1,10 +1,20 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib
 import pandas as pd
 import os
 
 app = FastAPI(title="API de Previsão de Imóveis", version="1.0")
+
+# Configuração do middleware CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:5500"],  # Especifique a origem permitida
+    allow_credentials=True,
+    allow_methods=["*"],  # Permitir todos os métodos (GET, POST, etc.)
+    allow_headers=["*"],  # Permitir todos os cabeçalhos
+)
 
 try:
     model_rf = joblib.load('modelo.joblib')
@@ -49,22 +59,28 @@ class ImovelInput(BaseModel):
     bairro: str | None = None
 
 def preprocess_input(input_data: ImovelInput) -> pd.DataFrame:
+    # Converte os dados para DataFrame e substitui underscores por espaços
     df = pd.DataFrame([input_data.dict()])
     df.columns = [col.replace("_", " ") for col in df.columns]
+    # Imputa quaisquer valores ausentes com 0
+    df = df.fillna(0)
     return df
 
 def preprocess_input_linear(input_data: ImovelInput) -> pd.DataFrame:
+    # Converte os dados para DataFrame e substitui underscores por espaços
     df = pd.DataFrame([input_data.dict()])
     df.columns = [col.replace("_", " ") for col in df.columns]
 
+    # Obtém as colunas esperadas pelo modelo linear
     expected_columns = model_linear.feature_names_in_
-
+    # Se alguma coluna esperada não estiver presente, adiciona com valor 0
     for col in expected_columns:
         if col not in df.columns:
             df[col] = 0
-
+    # Reordena as colunas para que fiquem na mesma ordem que o modelo espera
     df = df[expected_columns]
-
+    # Imputa quaisquer valores ausentes com 0 para evitar o erro
+    df = df.fillna(0)
     return df
 
 @app.post("/predict", tags=["Random Forest"])
